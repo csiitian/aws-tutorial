@@ -1,9 +1,5 @@
 package org.shekhawat.coders.awstutorial.rest;
 
-import com.amazonaws.services.s3.model.Bucket;
-import com.amazonaws.services.s3.model.CompleteMultipartUploadResult;
-import com.amazonaws.services.s3.model.PutObjectResult;
-import com.amazonaws.services.s3.model.S3ObjectSummary;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.shekhawat.coders.awstutorial.service.AmazonS3Service;
@@ -22,24 +18,24 @@ public class AmazonS3Controller {
     private final AmazonS3Service amazonS3Service;
 
     @GetMapping("buckets")
-    public List<Bucket> getAllBuckets() {
+    public List<String> getAllBuckets() {
         return amazonS3Service.getAllBuckets();
     }
 
     @GetMapping("bucket/all")
-    public List<S3ObjectSummary> getBucketObjects() {
+    public List<String> getBucketObjects() {
         return amazonS3Service.getBucketObjects();
     }
 
     @PostMapping
-    public List<PutObjectResult> uploadFile(@RequestParam("file") List<MultipartFile> multipartFiles) {
+    public List<String> uploadFile(@RequestParam("file") List<MultipartFile> multipartFiles) {
         return multipartFiles.stream()
                 .map(amazonS3Service::uploadFile)
                 .collect(Collectors.toList());
     }
 
     @PutMapping
-    public PutObjectResult updateFile(@RequestParam String fileName, @RequestParam("file") MultipartFile multipartFile) {
+    public String updateFile(@RequestParam String fileName, @RequestParam("file") MultipartFile multipartFile) {
         return amazonS3Service.updateFile(fileName, multipartFile);
     }
 
@@ -49,7 +45,7 @@ public class AmazonS3Controller {
     }
 
     @PostMapping("multipart")
-    public List<CompleteMultipartUploadResult> multipartUploadFile(@RequestParam("file") List<MultipartFile> multipartFiles) {
+    public List<String> multipartUploadFile(@RequestParam("file") List<MultipartFile> multipartFiles) {
         log.info("Multipart Upload Started.");
         return multipartFiles.stream()
                 .map(amazonS3Service::multipartUploadFile)

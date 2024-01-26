@@ -15,7 +15,7 @@
     <description>aws-tutorial</description>
     <properties>
         <java.version>17</java.version>
-        <aws.sdk.version>1.12.643</aws.sdk.version>
+        <aws.sdk.version>2.23.10</aws.sdk.version>
     </properties>
     <dependencies>
         <dependency>
@@ -29,13 +29,13 @@
 
         <!-- aws services -->
         <dependency>
-            <groupId>com.amazonaws</groupId>
-            <artifactId>aws-java-sdk-s3</artifactId>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>sqs</artifactId>
             <version>${aws.sdk.version}</version>
         </dependency>
         <dependency>
-            <groupId>com.amazonaws</groupId>
-            <artifactId>aws-java-sdk-sqs</artifactId>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
             <version>${aws.sdk.version}</version>
         </dependency>
 

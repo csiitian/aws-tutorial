@@ -1,148 +1,167 @@
 package org.shekhawat.coders.awstutorial.service;
 
-import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.model.*;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.shekhawat.coders.awstutorial.properties.AwsProperties;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.*;
 
-import java.io.*;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class AmazonS3Service {
 
-    private final AmazonS3 amazonS3Client;
+    private final S3Client s3Client;
     private final AwsProperties awsProperties;
 
-    public List<Bucket> getAllBuckets() {
-        return amazonS3Client.listBuckets();
+    public AmazonS3Service(@Qualifier("s3Client") S3Client s3Client, AwsProperties awsProperties) {
+        this.s3Client = s3Client;
+        this.awsProperties = awsProperties;
     }
 
-    public List<S3ObjectSummary> getBucketObjects() {
-        return amazonS3Client.listObjectsV2(awsProperties.getS3().getBucket())
-                .getObjectSummaries();
+    public List<String> getAllBuckets() {
+        return s3Client.listBuckets().buckets().stream()
+                .map(Bucket::name).toList();
     }
 
-    public PutObjectResult uploadFile(MultipartFile multipartFile) {
-        ObjectMetadata objectMetadata = new ObjectMetadata();
-        objectMetadata.setContentLength(multipartFile.getSize());
+    public List<String> getBucketObjects() {
+        ListObjectsV2Request request = ListObjectsV2Request.builder()
+                .bucket(awsProperties.getS3().getBucket())
+                .build();
+        return s3Client.listObjectsV2(request).contents().stream()
+                .map(S3Object::key).toList();
+    }
 
+    public String uploadFile(MultipartFile multipartFile) {
         try {
-            PutObjectRequest putObjectRequest = new PutObjectRequest(
-                    awsProperties.getS3().getBucket(),
-                    multipartFile.getOriginalFilename(),
-                    multipartFile.getInputStream(),
-                    objectMetadata
-            ).withStorageClass(StorageClass.IntelligentTiering);
+            PutObjectRequest putObjectRequest = PutObjectRequest.builder()
+                    .bucket(awsProperties.getS3().getBucket())
+                    .key(multipartFile.getOriginalFilename())
+                    .contentLength(multipartFile.getSize())
+                    .storageClass(StorageClass.GLACIER)
+                    .build();
 
-            return amazonS3Client.putObject(putObjectRequest);
+            s3Client.putObject(putObjectRequest,
+                    RequestBody.fromBytes(multipartFile.getInputStream().readAllBytes()));
+            return multipartFile.getOriginalFilename() + " Uploaded.";
         } catch (IOException e) {
-            return null;
+            return e.getMessage();
         }
     }
 
     public void deleteFile(String fileName) {
-        DeleteObjectRequest deleteObjectRequest = new DeleteObjectRequest(
-                awsProperties.getS3().getBucket(),
-                fileName
-        );
+        DeleteObjectRequest deleteObjectRequest = DeleteObjectRequest.builder()
+                .bucket(awsProperties.getS3().getBucket())
+                .key(fileName)
+                .build();
 
-        amazonS3Client.deleteObject(deleteObjectRequest);
+        s3Client.deleteObject(deleteObjectRequest);
     }
 
-    public PutObjectResult updateFile(String fileName, MultipartFile multipartFile) {
-        ObjectMetadata objectMetadata = new ObjectMetadata();
-        objectMetadata.setContentLength(multipartFile.getSize());
-
+    public String updateFile(String fileName, MultipartFile multipartFile) {
         try {
-            PutObjectRequest putObjectRequest = new PutObjectRequest(
-                    awsProperties.getS3().getBucket(),
-                    fileName,
-                    multipartFile.getInputStream(),
-                    objectMetadata
-            );
+            PutObjectRequest putObjectRequest = PutObjectRequest.builder()
+                    .bucket(awsProperties.getS3().getBucket())
+                    .key(fileName)
+                    .contentLength(multipartFile.getSize())
+                    .storageClass(StorageClass.GLACIER)
+                    .build();
 
-            return amazonS3Client.putObject(putObjectRequest);
+            s3Client.putObject(putObjectRequest,
+                    RequestBody.fromBytes(multipartFile.getInputStream().readAllBytes()));
+            return multipartFile.getOriginalFilename() + " Uploaded.";
         } catch (IOException e) {
-            return null;
+            return e.getMessage();
         }
     }
 
-    public CompleteMultipartUploadResult multipartUploadFile(MultipartFile multipartFile) {
-
+    public String multipartUploadFile(MultipartFile multipartFile) {
         String bucketName = awsProperties.getS3().getBucket();
         String key = multipartFile.getOriginalFilename();
 
-        ObjectMetadata objectMetadata = new ObjectMetadata();
-        objectMetadata.setContentLength(multipartFile.getSize());
+        CreateMultipartUploadRequest createMultipartUploadRequest = CreateMultipartUploadRequest.builder()
+                .bucket(bucketName)
+                .key(key)
+                .build();
 
-        InitiateMultipartUploadRequest initiateMultipartUploadRequest = new InitiateMultipartUploadRequest(
-                bucketName,
-                key,
-                objectMetadata
-        );
-        InitiateMultipartUploadResult initiateMultipartUploadResult = amazonS3Client.initiateMultipartUpload(initiateMultipartUploadRequest);
-        String uploadId = initiateMultipartUploadResult.getUploadId();
+        CreateMultipartUploadResponse createMultipartUploadResponse = s3Client.createMultipartUpload(createMultipartUploadRequest);
+        String uploadId = createMultipartUploadResponse.uploadId();
         log.info("UploadId: {}", uploadId);
 
         try {
             InputStream inputStream = multipartFile.getInputStream();
             int BUFFER_SIZE = 5 * 1024 * 1024, partId = 1, bytesRead;
-            boolean finalPart;
             byte[] byteArray = new byte[BUFFER_SIZE];
-            List<PartETag> partETagList = new ArrayList<>();
+            List<CompletedPart> completedParts = new ArrayList<>();
+
             while ((bytesRead = inputStream.read(byteArray, 0, BUFFER_SIZE)) != -1) {
-                finalPart = bytesRead < BUFFER_SIZE;
                 log.info("Part No. {}, Bytes Read: {}", partId, bytesRead);
 
-                UploadPartRequest uploadRequest = new UploadPartRequest()
-                        .withBucketName(bucketName)
-                        .withKey(key)
-                        .withUploadId(uploadId)
-                        .withPartNumber(partId) // partNumber should be between 1 and 10000 inclusively
-                        .withPartSize(bytesRead)
-                        .withInputStream(new ByteArrayInputStream(byteArray, 0, bytesRead))
-                        .withLastPart(finalPart);
+                UploadPartRequest uploadRequest = UploadPartRequest.builder()
+                        .bucket(bucketName)
+                        .key(key)
+                        .uploadId(uploadId)
+                        .partNumber(partId)
+                        .build();
 
-                UploadPartResult uploadResult = amazonS3Client.uploadPart(uploadRequest);
-                partETagList.add(uploadResult.getPartETag());
+                UploadPartResponse uploadPartResponse = s3Client.uploadPart(uploadRequest,
+                        RequestBody.fromByteBuffer(ByteBuffer.wrap(byteArray, 0, bytesRead)));
 
-                log.info("Successfully submitted uploadPartId: {} | {}", partId++, uploadResult);
+                completedParts.add(CompletedPart.builder()
+                        .partNumber(partId)
+                        .eTag(uploadPartResponse.eTag())
+                        .build());
+
+                log.info("Successfully submitted uploadPartId: {} | {}", partId++, uploadPartResponse);
             }
 
+            CompletedMultipartUpload completedMultipartUpload = CompletedMultipartUpload.builder()
+                    .parts(completedParts)
+                    .build();
+
+            CompleteMultipartUploadRequest completeMultipartUploadRequest = CompleteMultipartUploadRequest.builder()
+                    .bucket(bucketName)
+                    .key(key)
+                    .uploadId(uploadId)
+                    .multipartUpload(completedMultipartUpload)
+                    .build();
+
+            String response = s3Client.completeMultipartUpload(completeMultipartUploadRequest).key();
             log.info("File uploaded successfully.");
-
-            CompleteMultipartUploadRequest completeMultipartUploadRequest = new CompleteMultipartUploadRequest();
-            completeMultipartUploadRequest.setKey(key);
-            completeMultipartUploadRequest.setBucketName(bucketName);
-            completeMultipartUploadRequest.setUploadId(uploadId);
-            completeMultipartUploadRequest.setPartETags(partETagList);
-
-            return amazonS3Client.completeMultipartUpload(completeMultipartUploadRequest);
+            return response;
         } catch (IOException e) {
             // abort upload
-            AbortMultipartUploadRequest abortMultipartUploadRequest = new AbortMultipartUploadRequest(
-                    bucketName,
-                    key,
-                    uploadId
-            );
-            amazonS3Client.abortMultipartUpload(abortMultipartUploadRequest);
-            return null;
+            AbortMultipartUploadRequest abortMultipartUploadRequest = AbortMultipartUploadRequest.builder()
+                    .bucket(bucketName)
+                    .key(key)
+                    .uploadId(uploadId)
+                    .build();
+            s3Client.abortMultipartUpload(abortMultipartUploadRequest);
+            return e.getMessage();
         }
     }
 
     public String downloadFile(String fileName) {
-        GetObjectRequest getObjectRequest = new GetObjectRequest(awsProperties.getS3().getBucket(), fileName);
+        GetObjectRequest getObjectRequest = GetObjectRequest.builder()
+                .bucket(awsProperties.getS3().getBucket())
+                .key(fileName)
+                .build();
+
         try {
-            byte[] objectResponse = amazonS3Client.getObject(getObjectRequest).getObjectContent().readAllBytes();
+            byte[] objectResponse = s3Client.getObject(getObjectRequest).readAllBytes();
             File file = new File(System.getProperty("user.dir") + "/" + fileName);
-            FileOutputStream fileOutputStream = new FileOutputStream(file);
+            FileOutputStream fileOutputStream = new FileOutputStream(file, false);
             fileOutputStream.write(objectResponse);
             fileOutputStream.close();
             return file.getAbsolutePath();
