@@ -1,0 +1,19 @@
+aws:
+  access: ${AWS_ACCESS:}
+  secret: ${AWS_SECRET:}
+  account-no: ${AWS_ACCOUNT_NO:}
+  s3:
+    bucket: ${S3_BUCKET:aws-bucket-sns-tutorial}
+    region: ${S3_REGION:ap-south-1}
+  sqs:
+    region: ${SQS_REGION:ap-south-1}
+    queue-name: ${SQS_QUEUE_NAME:SQSQueueTutorial}
+    visibility-timeout: ${SQS_VISIBILITY_TIMEOUT:30}
+    max-message: ${SQS_MAX_MESSAGE:10}
+    wait-time: ${SQS_WAIT_TIME:20}
+
+spring:
+  servlet:
+    multipart:
+      max-request-size: 1GB
+      max-file-size: 1GB
