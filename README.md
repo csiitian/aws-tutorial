@@ -54,5 +54,5 @@ Now Run [AwsTutorialApplication.java](src%2Fmain%2Fjava%2Forg%2Fshekhawat%2Fcode
 [Amazon S3](https://aws.amazon.com/pm/serv-s3/)
 
 ## Contributing
-Clone the repo
-Create PR for your changes
+- Clone the repo
+- Create PR for your changes

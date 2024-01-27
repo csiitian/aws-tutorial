@@ -14,6 +14,5 @@ public class WarmUpHandler implements ApplicationListener<ContextRefreshedEvent>
 
     @Override
     public void onApplicationEvent(@NonNull ContextRefreshedEvent event) {
-
     }
 }
